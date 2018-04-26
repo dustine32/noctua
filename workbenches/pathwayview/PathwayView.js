@@ -31,6 +31,8 @@ var widgetry = require('noctua-widgetry');
 var cytoscape = require('cytoscape');
 var regCose = require('cytoscape-cose-bilkent');
 regCose( cytoscape ); // register extension
+var regSignal = require('cytoscape-cb-signaling');
+regSignal( cytoscape );
 
 // Aliases
 var each = us.each;
@@ -151,7 +153,7 @@ var PathwayViewInit = function(user_token){
 	return retlist;
     }
 
-    function _render_graph(ngraph, layout, fold, nest, show_mf_p, show_hi_p, show_shape){
+    function _render_graph(ngraph, layout, fold, nest, show_mf_p, show_hi_p, show_shape, collapse_complex){
 
 	// Wipe it and start again.
 	jQuery('#'+graph_id).empty();
@@ -359,8 +361,8 @@ var PathwayViewInit = function(user_token){
 
 	    // Make a label from it.
 	    var nlbl = table_row.join("\n");
-	    console.log(table_row);
-	    //console.log(nlbl);
+		console.log(table_row);
+		//console.log(nlbl);
 
 	    // Add nesting where desired, if the nesting isn't
 	    // breaking the single parent model.
@@ -393,9 +395,9 @@ var PathwayViewInit = function(user_token){
 	    });
 	});
 	each(g.all_edges(), function(e){
-
+		
 	    // Detect endpoint type as best as possible.
-	    var rn = e.relation() || 'n/a';
+		var rn = e.relation() || 'n/a';
 	    var rglyph = aid.glyph(rn);
 	    var glyph = null;
 	    if( rglyph === 'arrow' ){ // Arrow is explicit filled "PlainArrow".
@@ -414,7 +416,7 @@ var PathwayViewInit = function(user_token){
 		// For things like diamonds, and other currently unspecified
 		// relations.
 		glyph = 'circle';
-	    }
+		}
 
 	    var readable_rn = aid.readable(rn) || rn;
 	    // If context aid doesn't work, see if it comes with a label.
@@ -423,21 +425,43 @@ var PathwayViewInit = function(user_token){
 		if( label_rn !== rn ){
 		    readable_rn = label_rn; // use label
 		}
-	    }
-
-	    // Push final edge data.
-	    elements.push({
-		group: 'edges',
-		data: {
-		    id: e.id(),
-		    source: e.subject_id(),
-		    target: e.object_id(),
-		    predicate: e.predicate_id(),
-		    label: readable_rn,
-		    color: aid.color(rn),
-		    glyph: glyph
 		}
-	    });
+		
+		var push_edge = true;
+		if (collapse_complex && collapse_complex === "yes"){
+			var my_test_thing = g.get_edge(e.object_id(), e.subject_id(), e.predicate_id());
+			if (my_test_thing){
+				//console.log(my_test_thing);
+				glyph = 'none';
+				readable_rn = "";
+			}
+			each(elements, function(ele){
+				if (ele["group"] === "edges"){
+					if (ele["data"]["source"] === e.object_id() && ele["data"]["target"] === e.subject_id()){
+						push_edge = false;
+					}
+				}
+			});
+		}
+		
+		// Push final edge data.
+		var edge_data = {
+			group: 'edges',
+			data: {
+				id: e.id(),
+				source: e.subject_id(),
+				target: e.object_id(),
+				predicate: e.predicate_id(),
+				label: readable_rn,
+				color: aid.color(rn),
+				glyph: glyph
+			}
+		};
+		
+		
+		if (push_edge){
+			elements.push(edge_data);
+		}
 	});
 
 	// Get roots for algorithms that need it.
@@ -585,7 +609,11 @@ var PathwayViewInit = function(user_token){
 		//maximalAdjustments: 0,
 		circle: false//,
 		//roots: root_ids
-	    }
+		},
+		'cb-signaling': {
+			name: 'cb-signaling',
+			randomize: true,
+		}
 	    // 'arbor': {
 	    // 	name: 'arbor',
 	    // 	fit: true, // whether to fit to viewport
@@ -812,7 +840,7 @@ var PathwayViewInit = function(user_token){
 	// Go ahead and wire-up the interface.
 	jQuery("#" + "layout_selection").change(function(event){
 	    graph_layout = jQuery(this).val();
-	    //_render_graph(graph, graph_layout, graph_fold);
+		//_render_graph(graph, graph_layout, graph_fold);
 	    console.log('layout_opts', layout_opts[graph_layout]);
 	    var layout = cy.layout(layout_opts[graph_layout]);
 	    layout.run();
@@ -848,6 +876,13 @@ var PathwayViewInit = function(user_token){
 	    _render_graph(graph, graph_layout, graph_fold,
 			  graph_nest, graph_show_mf, graph_show_hi,
 			  graph_show_shape);
+	});
+	jQuery("#" + "collapse_complex").change(function(event){
+	    collapse_complex = jQuery(this).val();
+	    console.log('collapse complexes now: "' + collapse_complex + '"');
+	    _render_graph(graph, graph_layout, graph_fold,
+			  graph_nest, graph_show_mf, graph_show_hi,
+			  graph_show_shape, collapse_complex);
 	});
     }, 10);
 
