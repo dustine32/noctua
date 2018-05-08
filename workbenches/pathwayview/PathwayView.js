@@ -33,6 +33,10 @@ var regCose = require('cytoscape-cose-bilkent');
 regCose( cytoscape ); // register extension
 var regSignal = require('cytoscape-cb-signaling');
 regSignal( cytoscape );
+var signalingLayout = require('./SignalingLayout');
+signalingLayout( cytoscape );
+var cola = require('cytoscape-cola');
+cola( cytoscape );
 
 // Aliases
 var each = us.each;
@@ -67,7 +71,9 @@ var minerva_manager = require('bbop-manager-minerva');
 
 var graph_id = 'pathwayview';
 //var graph_layout = 'noctuadef'; // default
-var graph_layout = 'cose-bilkent'; // default
+// var graph_layout = 'cose-bilkent'; // default
+// var graph_layout = 'signaling'; // default
+var graph_layout = 'cola'; // default
 var graph_fold = 'editor'; // default
 var graph_nest = 'no'; // default
 var graph_show_mf = 'no'; // default
@@ -195,7 +201,7 @@ var PathwayViewInit = function(user_token){
 	var strippable_rels = {
 	    "BFO:0000050": true, // part of
 	    "RO:0002220": true, // adjacent to
-	    "BFO:0000066": true // occurs in
+		"BFO:0000066": true // occurs in
 	};
 	us.each(g.all_edges(), function(e){
 	    if( nestable_rels[e.predicate_id()] ){
@@ -213,6 +219,25 @@ var PathwayViewInit = function(user_token){
 	    }
 	});
 
+	var parse_g = function(graph, eings) {
+		var new_eings = []
+		
+		us.each(g.all_nodes(), function(n) {
+			var node_rels = {};
+			us.each(g.get_edges_by_subject(n.id()), function(e) {
+				if (node_rels[e.predicate_id()] === undefined) {
+					node_rels[e.predicate_id()] = 1;
+				} else {
+					node_rels[e.predicate_id()]++;
+				}
+			});
+			// console.log(node_rels);
+			if (node_rels["RO:0002233"] === 1 && node_rels["RO:0002333"] === 1 && Object.keys(node_rels).length === 2) {
+				g.remove_node(n.id());
+			}
+		});
+	}
+
 	// If it wasn't a singleton before we started, but is one now,
 	// remove it. In "nest" mode, only remove ones that are not
 	// going to be nested.
@@ -227,6 +252,9 @@ var PathwayViewInit = function(user_token){
 		}
 	    }
 	});
+	if (collapse_complex) {
+		// parse_g(g);
+	}
 
 	///
 	/// Assemble labels and draw.
@@ -240,13 +268,123 @@ var PathwayViewInit = function(user_token){
 		cat_list.push(in_type.category());
 	    });
 	});
+
+	function compare(a,b) {
+		a_edges = edges_for_node(a);
+		b_edges = edges_for_node(b);
+		if (a_edges.length > b_edges.length) {
+			return 1;
+		}
+		if (a_edges.length < b_edges.length) {
+			return -1;
+		}
+	
+		return 0;
+	}
+	var edges_for_node = function(node) {
+		var matching_edges = [];
+		// console.log(g);
+		each(g.all_edges(), function(e) {
+			// console.log(e);
+			if (e.subject_id() === node.id() || e.object_id() === node.id()){
+				// console.log(e);
+				matching_edges.push(e);
+			}
+		});
+		return matching_edges;
+	};
+	var get_real_node = function(graph, node_id) {
+		var found_n = null;
+		each(graph.all_nodes(), function(n){
+			if (n.id() === node_id){
+				found_n = n;
+			}
+		});
+		return found_n;
+	};
+	var node_class = function(node){
+		var result = null;
+		each(node.types(), function(nt){
+			result = nt.class_id();
+		});
+		return result;
+	};
+	var node_is_term = function(node){
+		var result = false;
+		var nclass = node_class(node);
+		if (nclass.startsWith("GO:") || nclass.startsWith("CL:") || nclass.startsWith("UBERON:")){
+			result = true;
+		}
+		return result;
+	};
+	var xy_coord_set = [
+		{x: 0, y: 20},
+		{x: 20, y: 20},
+		{x: 20, y: 0},
+		{x: 0, y: -20},
+		{x: -20, y: -20},
+		{x: -20, y: 20},
+		{x: 20, y: -20}
+	];
+	var distance_factor = 8;
+	var reg_relations = ["RO:0002211", "RO:0002578", "RO:0002629", "RO:0002630"];
+	var findIndex = function(array, thing) {
+		for (var i = 0; i < array.length; i++) {
+			if (array[i] === thing) {
+				return i;
+			}
+		}
+		return -1;
+	};
+	var get_start_nodes = function(graph){
+		var start_nodes = graph.all_nodes();
+		// console.log(start_nodes);
+		each(graph.all_nodes(), function(node){
+			each(graph.all_edges(), function(edge){
+				// if (edge.object_id() === node.id()){
+				if (reg_relations.includes(edge.predicate_id()) && edge.object_id() === node.id()){
+					var idx_to_remove = findIndex(start_nodes, node);
+					if (idx_to_remove >= 0){
+						// console.log(edge);
+						start_nodes.splice(idx_to_remove, 1);
+					}
+				}
+			});
+		});
+		return start_nodes;
+	};
+	
+	var preset_position_layouts = ["signaling", "cola"];
+	// var preset_position_layouts = ["signaling"];
+	if (preset_position_layouts.includes(layout)) {
+		var start_nodes = get_start_nodes(g);
+		// each(get_start_nodes(g), function(sn){
+		// 	console.log(node_class(sn));
+		// });
+		var gp_nodes
+		var node_counter = 1;
+		each(g.all_nodes().sort(compare), function(n){
+			// var edges_n_stuff = edges_for_node(n);
+			// console.log(node_counter);
+			if (!node_is_term(n)){
+				n.metadata({position: {x: node_counter * 10, y: node_counter * 10}});
+			
+				// If GP, up the counter
+				// if (!node_is_term(n) && start_nodes.includes(n)){
+			
+				node_counter++;
+			}
+			// node_counter++;
+
+		});
+	}
 	var tmph = bbop.hashify(cat_list);
 	cat_list = us.keys(tmph);
 
 	// Translate into something cytoscape can understand.
 	var elements = [];
+	
 	each(g.all_nodes(), function(n){
-
 	    var nid = n.id();
 
 	    // Where we'll assemble the label.
@@ -361,7 +499,7 @@ var PathwayViewInit = function(user_token){
 
 	    // Make a label from it.
 	    var nlbl = table_row.join("\n");
-		console.log(table_row);
+		// console.log(table_row);
 		//console.log(nlbl);
 
 	    // Add nesting where desired, if the nesting isn't
@@ -379,20 +517,82 @@ var PathwayViewInit = function(user_token){
 		}
 	    }
 
-	    // Create the final element.
-	    elements.push({
-		group: 'nodes',
-		data: {
-		    id: n.id(),
-		    label: nlbl,
-		    parent: parent,
-		    'text-valign': text_v_align,
-		    'text-halign': text_h_align,
-		    'background-color': bgc,
-		    degree: (g.get_child_nodes(n.id()).length * 10) +
-			g.get_parent_nodes(n.id()).length
+		// Create the final element.
+		var node_data = {
+			group: 'nodes',
+			data: {
+				id: n.id(),
+				label: nlbl,
+				parent: parent,
+				'text-valign': text_v_align,
+				'text-halign': text_h_align,
+				'background-color': bgc,
+				degree: (g.get_child_nodes(n.id()).length * 10) +
+				g.get_parent_nodes(n.id()).length
+			},
+			// position: {x: node_counter * 10, y: node_counter * 10}
 		}
-	    });
+		// console.log(layout);
+		if (preset_position_layouts.includes(layout)) {
+			// g.get_edge()
+			// console.log(n);
+			var position_data = null;
+			if (!node_is_term(n)){
+				// position_data = {x: 20, y: 20};
+				position_data = n.metadata()["position"];
+			} else {
+				var cloned_xy_coord_set = JSON.parse(JSON.stringify(xy_coord_set))
+				var set_counter = 0;
+				var node_edges = edges_for_node(n);
+				if (n.id() === "gomodel:c2df45a7-d957-4701-a06e-79c1677e58d7/208a1d4f-c350-4349-8ab7-bd11b413ca07"){
+					console.log('hey');
+				}
+				each(node_edges, function(e){
+					// console.log(set_counter);
+					var subject_node = get_real_node(g, e.subject_id());
+					var object_node = get_real_node(g, e.object_id());
+					// Copy position to node at other end of edge
+					if (subject_node && subject_node != n && !node_is_term(subject_node)){
+						var subj_meta = subject_node.metadata();
+						subj_meta["position"] = {
+							x: subject_node.metadata()["position"]["x"] + cloned_xy_coord_set[set_counter]["x"] * distance_factor,
+							y: subject_node.metadata()["position"]["y"] + cloned_xy_coord_set[set_counter]["y"] * distance_factor
+						};
+						if (subject_node.id() === "gomodel:c2df45a7-d957-4701-a06e-79c1677e58d7/bad924af-5c4c-40dc-a722-44a3ed46e179"){
+							// console.log(subj_meta);
+						}
+						n.metadata(subj_meta);
+					}
+					if (object_node && object_node != n && !node_is_term(object_node)){
+						var obj_meta = object_node.metadata();
+						// console.log(n);
+						obj_meta["position"] = {
+							x: object_node.metadata()["position"]["x"] + cloned_xy_coord_set[set_counter]["x"] * distance_factor,
+							y: object_node.metadata()["position"]["y"] + cloned_xy_coord_set[set_counter]["y"] * distance_factor
+						};
+						if (object_node.id() === "gomodel:c2df45a7-d957-4701-a06e-79c1677e58d7/bad924af-5c4c-40dc-a722-44a3ed46e179"){
+							// console.log(obj_meta);
+						}
+						n.metadata(obj_meta);
+					}
+					if (set_counter < cloned_xy_coord_set.length - 1){
+						set_counter++;
+					}
+				});
+				console.log(n);
+				if (!n.metadata()){
+					position_data = {x: 200, y: 200};
+				}
+				else{
+					position_data = n.metadata()["position"];
+				}
+
+			}
+			
+			node_data["position"] = position_data;
+		}
+	    elements.push(node_data);
+		// node_counter++;
 	});
 	each(g.all_edges(), function(e){
 		
@@ -613,6 +813,39 @@ var PathwayViewInit = function(user_token){
 		'cb-signaling': {
 			name: 'cb-signaling',
 			randomize: true,
+			nodeDimensionsIncludeLabels: true
+		},
+		'signaling': {
+			name: 'preset',
+			fit: true,
+			// positions: function(a) {
+			// 	var node_edges = a._private.edges;
+			// 	// console.log(node_edges.length);
+			// 	for (var x = 0; x < node_edges.length; x++){
+			// 		// console.log(node_edges[x]["position"]);
+			// 		if (Object.keys(node_edges[x]["position"]).length > 0){
+			// 			// console.log("say hey");
+			// 			var coords = node_edges[x]["position"];
+			// 			return {x: coords["x"] + 20, y: coords["y"] + 20};
+			// 		}
+			// 		else {
+			// 			node_edges[x]["position"] = {x: 20, y: 20};
+			// 			return node_edges[x]["position"];
+			// 		}
+			// 	}
+			// },
+			// position: function(a) {
+			// 	console.log(a.data.position);
+			// 	// return a.data.position;
+			// },
+			
+		},
+		'cola': {
+			name: 'cola',
+			fit: true,
+			randomize: true,
+			flow: {axis: 'x'},
+			maxSimulationTime: 28000
 		}
 	    // 'arbor': {
 	    // 	name: 'arbor',
