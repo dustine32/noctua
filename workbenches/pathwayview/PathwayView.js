@@ -71,9 +71,7 @@ var minerva_manager = require('bbop-manager-minerva');
 
 var graph_id = 'pathwayview';
 //var graph_layout = 'noctuadef'; // default
-// var graph_layout = 'cose-bilkent'; // default
-// var graph_layout = 'signaling'; // default
-var graph_layout = 'cola'; // default
+var graph_layout = 'cose-bilkent'; // default
 var graph_fold = 'editor'; // default
 var graph_nest = 'no'; // default
 var graph_show_mf = 'no'; // default
@@ -82,6 +80,7 @@ var graph_show_shape = 'ellipse'; // default
 var graph = null; // the graph itself
 var cy = null;
 var layout_opts = null;
+var preset_positions = [];
 
 ///
 var PathwayViewInit = function(user_token){
@@ -354,9 +353,9 @@ var PathwayViewInit = function(user_token){
 		return start_nodes;
 	};
 	
-	var preset_position_layouts = ["signaling", "cola"];
+	var preset_position_layouts = [];
 	// var preset_position_layouts = ["signaling"];
-	if (preset_position_layouts.includes(layout)) {
+	if (true) {//(preset_position_layouts.includes(layout)) {
 		var start_nodes = get_start_nodes(g);
 		// each(get_start_nodes(g), function(sn){
 		// 	console.log(node_class(sn));
@@ -479,7 +478,7 @@ var PathwayViewInit = function(user_token){
 			table_row.push(nl);
 		    }
 		});
-
+		// BFO:0000002 - copy drop-down funtion for this class - show/hide continuants
 	    }else if( show_mf_p === 'yes' ){
 
 		// Extract node type labels and add them.
@@ -558,9 +557,6 @@ var PathwayViewInit = function(user_token){
 							x: subject_node.metadata()["position"]["x"] + cloned_xy_coord_set[set_counter]["x"] * distance_factor,
 							y: subject_node.metadata()["position"]["y"] + cloned_xy_coord_set[set_counter]["y"] * distance_factor
 						};
-						if (subject_node.id() === "gomodel:c2df45a7-d957-4701-a06e-79c1677e58d7/bad924af-5c4c-40dc-a722-44a3ed46e179"){
-							// console.log(subj_meta);
-						}
 						n.metadata(subj_meta);
 					}
 					if (object_node && object_node != n && !node_is_term(object_node)){
@@ -570,16 +566,12 @@ var PathwayViewInit = function(user_token){
 							x: object_node.metadata()["position"]["x"] + cloned_xy_coord_set[set_counter]["x"] * distance_factor,
 							y: object_node.metadata()["position"]["y"] + cloned_xy_coord_set[set_counter]["y"] * distance_factor
 						};
-						if (object_node.id() === "gomodel:c2df45a7-d957-4701-a06e-79c1677e58d7/bad924af-5c4c-40dc-a722-44a3ed46e179"){
-							// console.log(obj_meta);
-						}
 						n.metadata(obj_meta);
 					}
 					if (set_counter < cloned_xy_coord_set.length - 1){
 						set_counter++;
 					}
 				});
-				console.log(n);
 				if (!n.metadata()){
 					position_data = {x: 200, y: 200};
 				}
@@ -589,11 +581,12 @@ var PathwayViewInit = function(user_token){
 
 			}
 			
-			node_data["position"] = position_data;
+			preset_positions[n.id()] = position_data;
 		}
 	    elements.push(node_data);
 		// node_counter++;
 	});
+	var things_to_delete = [];
 	each(g.all_edges(), function(e){
 		
 	    // Detect endpoint type as best as possible.
@@ -628,16 +621,52 @@ var PathwayViewInit = function(user_token){
 		}
 		
 		var push_edge = true;
+		var e_id = e.id();
+		var source_id = e.subject_id();
+		var target_id = e.object_id();
 		if (collapse_complex && collapse_complex === "yes"){
-			var my_test_thing = g.get_edge(e.object_id(), e.subject_id(), e.predicate_id());
-			if (my_test_thing){
-				//console.log(my_test_thing);
-				glyph = 'none';
-				readable_rn = "";
+			// protein_binding_1, g1, has_input
+			// protein_binding_2, g1, enabled_by
+			// protein_binding_2, g2, has_input
+			// protein_binding_1, g2, enabled_by
+			var subject_node = g.get_node(e.subject_id());
+			var object_node = g.get_node(e.object_id());
+			
+			if (subject_node.types()[0].class_label() === "protein binding" && e.predicate_id() === "RO:0002233"){	// has_input
+				var found_edges = g.get_edges_by_object(e.object_id());
+				each (found_edges, function(fe) {
+					fe_subject_node = g.get_node(fe.subject_id());
+					if (fe.id() != e.id() && fe_subject_node.types()[0].class_label() === "protein binding" && fe.predicate_id() === "RO:0002333") {	// enabled_by
+						// Delete fe and e edges as well as the two PB nodes fe_subject_node and subject_node
+						things_to_delete.push(e.id());
+						things_to_delete.push(fe.id());
+						things_to_delete.push(subject_node.id());
+						things_to_delete.push(fe_subject_node.id());
+
+						var fe_found_edges = g.get_edges_by_subject(fe.subject_id());
+						each(fe_found_edges, function(fefe){
+							if (fefe.predicate_id() === "RO:0002233") { // has_input
+								// Should probs do this in another set of each(edges) and each(nodes). See below.
+								// push_edge = false;
+								glyph = 'none';
+								readable_rn = "";
+								e_id = bbop.uuid();
+								source_id = e.object_id();
+								target_id = fefe.object_id();
+							}
+							
+						});
+						
+					}
+				});
+				// console.log(found_edges);
+				// console.log(object_node.types()[0].class_label());
+				// console.log(subject_node.types()[0].class_label());
 			}
+			// Checking for reverse edge to reduce redundancy
 			each(elements, function(ele){
 				if (ele["group"] === "edges"){
-					if (ele["data"]["source"] === e.object_id() && ele["data"]["target"] === e.subject_id()){
+					if (ele["data"]["source"] === target_id && ele["data"]["target"] === source_id){
 						push_edge = false;
 					}
 				}
@@ -648,9 +677,9 @@ var PathwayViewInit = function(user_token){
 		var edge_data = {
 			group: 'edges',
 			data: {
-				id: e.id(),
-				source: e.subject_id(),
-				target: e.object_id(),
+				id: e_id,
+				source: source_id,
+				target: target_id,
 				predicate: e.predicate_id(),
 				label: readable_rn,
 				color: aid.color(rn),
@@ -663,6 +692,14 @@ var PathwayViewInit = function(user_token){
 			elements.push(edge_data);
 		}
 	});
+
+	// Delete noted fe and e edges as well as the two PB nodes fe_subject_node and subject_node.
+	// Probs should be coming from collected arrays of nodes and edges.
+	if (collapse_complex && collapse_complex === "yes"){
+		elements = elements.filter(function(ele){
+			return !(things_to_delete.includes(ele["data"]["id"]));
+		});
+	}
 
 	// Get roots for algorithms that need it.
 	var roots = graph.get_root_nodes();
@@ -818,6 +855,10 @@ var PathwayViewInit = function(user_token){
 		'signaling': {
 			name: 'preset',
 			fit: true,
+			positions: preset_positions
+			// positions: function(a) {
+			// 	return preset_positions[a.id()];
+			// }
 			// positions: function(a) {
 			// 	var node_edges = a._private.edges;
 			// 	// console.log(node_edges.length);
@@ -839,13 +880,6 @@ var PathwayViewInit = function(user_token){
 			// 	// return a.data.position;
 			// },
 			
-		},
-		'cola': {
-			name: 'cola',
-			fit: true,
-			randomize: true,
-			flow: {axis: 'x'},
-			maxSimulationTime: 28000
 		}
 	    // 'arbor': {
 	    // 	name: 'arbor',
