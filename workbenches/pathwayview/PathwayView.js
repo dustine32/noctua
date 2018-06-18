@@ -666,7 +666,8 @@ var PathwayViewInit = function(user_token){
 			// Checking for reverse edge to reduce redundancy
 			each(elements, function(ele){
 				if (ele["group"] === "edges"){
-					if (ele["data"]["source"] === target_id && ele["data"]["target"] === source_id){
+					if ((ele["data"]["source"] === target_id && ele["data"]["target"] === source_id) ||
+						 ele["data"]["source"] === source_id && ele["data"]["target"] === target_id){
 						push_edge = false;
 					}
 				}
