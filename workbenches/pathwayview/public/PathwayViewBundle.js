@@ -49160,6 +49160,10 @@ var PathwayViewInit = function(user_token){
 	    "RO:0002220": true, // adjacent to
 		"BFO:0000066": true // occurs in
 	};
+	if (show_hi_p === 'no') {
+		console.log("strip these guys");
+		strippable_rels["RO:0002233"] = true;
+	}
 	us.each(g.all_edges(), function(e){
 	    if( nestable_rels[e.predicate_id()] ){
 		if( ! parent_trap[e.subject_id()] ){
@@ -49400,6 +49404,7 @@ var PathwayViewInit = function(user_token){
 					});
 				    }else if( show_hi_p === 'yes' &&
 					      e.predicate_id() === 'RO:0002233' ){
+							console.log("hey2");
 						  var hin = sub.get_node(snid);
 						  var hilbl = hin;
 						  // Extract type
@@ -49448,11 +49453,11 @@ var PathwayViewInit = function(user_token){
 		bgc = 'yellow';
 	    }
 
-	    // Add the has_inputs last.
-	    each(has_input_collection, function(itm){
-		//table_row.push('has_input('+itm+')');
-		table_row.push('('+itm+'➔)');
-	    });
+		// Add the has_inputs last.
+		each(has_input_collection, function(itm){
+			//table_row.push('has_input('+itm+')');
+			table_row.push('('+itm+'➔)');
+			});
 
 	    // Make a label from it.
 	    var nlbl = table_row.join("\n");
