@@ -162,14 +162,14 @@ var PathwayViewInit = function(user_token){
 
 	// Wipe it and start again.
 	jQuery('#'+graph_id).empty();
-
+	
 	// Try and get it folded as desired.
 	ngraph.unfold();
 	if( fold === 'evidence' ){
 	    graph_fold = fold;
 	    ngraph.fold_evidence();
 	}else if( fold === 'editor' ){
-	    graph_fold = fold;
+		graph_fold = fold;
 	    ngraph.fold_go_noctua(global_collapsible_relations);
 	}else{
 	    graph_fold = fold;
@@ -220,6 +220,7 @@ var PathwayViewInit = function(user_token){
 			      e.predicate_id());
 	    }
 	});
+	g.fold_go_noctua(global_collapsible_relations);
 
 	var parse_g = function(graph, eings) {
 		var new_eings = []
