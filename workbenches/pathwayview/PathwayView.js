@@ -31,8 +31,6 @@ var widgetry = require('noctua-widgetry');
 var cytoscape = require('cytoscape');
 var regCose = require('cytoscape-cose-bilkent');
 regCose( cytoscape ); // register extension
-var regSignal = require('cytoscape-cb-signaling');
-regSignal( cytoscape );
 var signalingLayout = require('./SignalingLayout');
 signalingLayout( cytoscape );
 var cola = require('cytoscape-cola');
@@ -357,8 +355,8 @@ var PathwayViewInit = function(user_token){
 		return start_nodes;
 	};
 	
-	var preset_position_layouts = [];
-	// var preset_position_layouts = ["signaling"];
+	// var preset_position_layouts = [];
+	var preset_position_layouts = ["signaling"];
 	if (true) {//(preset_position_layouts.includes(layout)) {
 		var start_nodes = get_start_nodes(g);
 		// each(get_start_nodes(g), function(sn){
@@ -408,7 +406,7 @@ var PathwayViewInit = function(user_token){
 	    if( rdfs_label ){
 		table_row.push('<<' + rdfs_label + '>>');
 	    }
-
+		console.log('hey');
 	    // First, extract any GP info (or has_input, depending on
 	    // rel), if it's there.  If it is, it is the exclusive
 	    // displayed info.
@@ -536,6 +534,7 @@ var PathwayViewInit = function(user_token){
 			// position: {x: node_counter * 10, y: node_counter * 10}
 		}
 		// console.log(layout);
+		
 		if (preset_position_layouts.includes(layout)) {
 			// g.get_edge()
 			// console.log(n);
@@ -547,9 +546,7 @@ var PathwayViewInit = function(user_token){
 				var cloned_xy_coord_set = JSON.parse(JSON.stringify(xy_coord_set))
 				var set_counter = 0;
 				var node_edges = edges_for_node(n);
-				if (n.id() === "gomodel:c2df45a7-d957-4701-a06e-79c1677e58d7/208a1d4f-c350-4349-8ab7-bd11b413ca07"){
-					console.log('hey');
-				}
+				
 				each(node_edges, function(e){
 					// console.log(set_counter);
 					var subject_node = get_real_node(g, e.subject_id());
@@ -1112,7 +1109,7 @@ var PathwayViewInit = function(user_token){
 	// Go ahead and wire-up the interface.
 	jQuery("#" + "layout_selection").change(function(event){
 	    graph_layout = jQuery(this).val();
-		//_render_graph(graph, graph_layout, graph_fold);
+		_render_graph(graph, graph_layout, graph_fold);
 	    console.log('layout_opts', layout_opts[graph_layout]);
 	    var layout = cy.layout(layout_opts[graph_layout]);
 	    layout.run();
